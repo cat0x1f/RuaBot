@@ -35,16 +35,15 @@ class BskyClient:
         """发布帖子到 Bluesky，返回帖子 URI"""
         try:
             if image_urls:
-                # 上传图片并收集 blob 引用
+                # 下载图片数据
                 images_data = []
                 for url in image_urls[:4]:  # Bluesky 最多 4 张图片
                     try:
                         img_data = self._download_image(url)
-                        upload = self.client.upload_blob(img_data)
-                        images_data.append(upload)
-                        logger.debug("Uploaded image: %s", url)
+                        images_data.append(img_data)
+                        logger.debug("Downloaded image: %s", url)
                     except Exception as exc:
-                        logger.warning("Failed to upload image %s: %s", url, exc)
+                        logger.warning("Failed to download image %s: %s", url, exc)
 
                 if images_data:
                     # 发帖带图片
@@ -185,6 +184,7 @@ def poll_and_forward(
 def fetch_latest_tweets(handle: str, limit: int = 10) -> list[dict[str, Any]]:
     """获取最新推文，只返回符合条件的推文"""
     url = f"{FXTWITTER_BASE_URL}{TWITTER_STATUSES_ENDPOINT.format(handle=handle)}?count={limit}"
+    logger.debug("Fetching tweets from: %s", url)
     response_data = fetch_json(url)
 
     tweets = []
