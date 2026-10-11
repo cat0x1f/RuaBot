@@ -6,24 +6,35 @@ import logging
 import commands.jrrp
 import commands.handle
 import commands.bsky
+import commands.twitter_to_bsky
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 ALLOWED_GROUPS = set(os.getenv("ALLOWED_GROUPS", "-1145141919810").split(","))
+
+# Bluesky → Telegram 配置
 BSKY_HANDLE = os.getenv("BSKY_HANDLE", "").strip()
+ENABLE_BSKY_TO_TG = os.getenv("ENABLE_BSKY_TO_TG", "false").lower() in ("true", "1", "yes", "on")
+
+# Twitter → Bluesky → Telegram 配置
+TWITTER_HANDLE = os.getenv("TWITTER_HANDLE", "").strip()
+BSKY_POST_HANDLE = os.getenv("BSKY_POST_HANDLE", "").strip()
+BSKY_POST_PASSWORD = os.getenv("BSKY_POST_PASSWORD", "").strip()
+ENABLE_TWITTER_TO_BSKY = os.getenv("ENABLE_TWITTER_TO_BSKY", "false").lower() in ("true", "1", "yes", "on")
 
 
-def parse_poll_interval() -> int:
+def parse_poll_interval(env_var: str, default: int = 60) -> int:
     try:
-        return max(10, int(os.getenv("BSKY_POLL_INTERVAL", "60")))
+        return max(10, int(os.getenv(env_var, str(default))))
     except ValueError:
         logging.getLogger().warning(
-            "Invalid BSKY_POLL_INTERVAL, fallback to 60 seconds"
+            "Invalid %s, fallback to %d seconds", env_var, default
         )
-        return 60
+        return default
 
 
-BSKY_POLL_INTERVAL = parse_poll_interval()
+BSKY_POLL_INTERVAL = parse_poll_interval("BSKY_POLL_INTERVAL", 60)
+TWITTER_POLL_INTERVAL = parse_poll_interval("TWITTER_POLL_INTERVAL", 60)
 
 MAX_AI_CHAT_MESSAGE_LENGTH = 100
 
@@ -79,23 +90,53 @@ def handle_text_message(message) -> None:
 
 
 def start_bot():
-    bsky_target_chats = get_bsky_target_chats()
+    target_chats = get_bsky_target_chats()
 
-    if BSKY_HANDLE and bsky_target_chats:
+    # 启动 Bluesky → Telegram 轮询器
+    if ENABLE_BSKY_TO_TG and BSKY_HANDLE and target_chats:
         logger.info(
-            "Starting bsky poller for %s -> %s",
+            "Starting Bluesky→Telegram poller for %s → %s",
             BSKY_HANDLE,
-            bsky_target_chats,
+            target_chats,
         )
         threading.Thread(
             target=commands.bsky.poll_latest_posts,
-            args=(bot, BSKY_HANDLE, bsky_target_chats, BSKY_POLL_INTERVAL),
+            args=(bot, BSKY_HANDLE, target_chats, BSKY_POLL_INTERVAL),
             daemon=True,
         ).start()
-    elif BSKY_HANDLE:
+    elif ENABLE_BSKY_TO_TG and BSKY_HANDLE:
         logger.warning(
-            "BSKY poller is disabled because no valid ALLOWED_GROUPS target is configured"
+            "Bluesky→Telegram poller is disabled because no valid ALLOWED_GROUPS target is configured"
         )
+    elif BSKY_HANDLE:
+        logger.info("Bluesky→Telegram poller is disabled by ENABLE_BSKY_TO_TG=false")
+
+    # 启动 Twitter → Bluesky → Telegram 轮询器
+    if ENABLE_TWITTER_TO_BSKY and TWITTER_HANDLE and BSKY_POST_HANDLE and BSKY_POST_PASSWORD and target_chats:
+        logger.info(
+            "Starting Twitter→Bluesky→Telegram poller for %s → %s → %s",
+            TWITTER_HANDLE,
+            BSKY_POST_HANDLE,
+            target_chats,
+        )
+        threading.Thread(
+            target=commands.twitter_to_bsky.poll_and_forward,
+            args=(
+                bot,
+                TWITTER_HANDLE,
+                BSKY_POST_HANDLE,
+                BSKY_POST_PASSWORD,
+                target_chats,
+                TWITTER_POLL_INTERVAL,
+            ),
+            daemon=True,
+        ).start()
+    elif ENABLE_TWITTER_TO_BSKY:
+        logger.warning(
+            "Twitter→Bluesky→Telegram poller is disabled: missing configuration (TWITTER_HANDLE, BSKY_POST_HANDLE, BSKY_POST_PASSWORD, or ALLOWED_GROUPS)"
+        )
+    elif TWITTER_HANDLE:
+        logger.info("Twitter→Bluesky→Telegram poller is disabled by ENABLE_TWITTER_TO_BSKY=false")
 
     while True:
         try:
