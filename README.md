@@ -21,6 +21,11 @@ export BOT_TOKEN=7816288053:AAGGmCm17YsPTHSYM5WOoHcV9akHOW0xyEM
 export ALLOWED_GROUPS=-1001852815669,-1268145665910
 export LOG_LEVEL=INFO
 
+# 日志配置
+export LOG_FILE=/app/data/ruabot.log
+export LOG_MAX_BYTES=10485760
+export LOG_BACKUP_COUNT=5
+
 # Bluesky → Telegram 转发（默认关闭）
 export ENABLE_BSKY_TO_TG=true
 export BSKY_HANDLE=alice.bsky.social
@@ -35,6 +40,14 @@ export BSKY_POST_PASSWORD=xxxx-xxxx-xxxx-xxxx
 export TWITTER_POLL_INTERVAL=60
 export TWITTER_STATE_FILE=/app/data/twitter_state.json
 ```
+
+### 日志配置
+
+- `LOG_FILE`：日志文件路径，默认 `/app/data/ruabot.log`，留空则只输出到控制台
+- `LOG_MAX_BYTES`：单个日志文件最大大小（字节），默认 `10485760`（10MB）
+- `LOG_BACKUP_COUNT`：保留的日志文件数量，默认 `5`
+
+日志轮转：当日志文件达到最大大小时，会自动创建新文件，旧文件重命名为 `ruabot.log.1`、`ruabot.log.2` 等，最多保留指定数量的备份。
 
 ## 功能说明
 

@@ -35,20 +35,20 @@ class BskyClient:
         """发布帖子到 Bluesky，返回帖子 URI"""
         try:
             if image_urls:
-                # 上传图片
-                images = []
+                # 上传图片并收集 blob 引用
+                images_data = []
                 for url in image_urls[:4]:  # Bluesky 最多 4 张图片
                     try:
                         img_data = self._download_image(url)
                         upload = self.client.upload_blob(img_data)
-                        images.append(upload.blob)
+                        images_data.append(upload)
                         logger.debug("Uploaded image: %s", url)
                     except Exception as exc:
                         logger.warning("Failed to upload image %s: %s", url, exc)
 
-                if images:
+                if images_data:
                     # 发帖带图片
-                    response = self.client.send_images(text=text, images=images)
+                    response = self.client.send_images(text=text, images=images_data)
                 else:
                     # 图片全部失败，只发文本
                     response = self.client.send_post(text=text)

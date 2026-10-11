@@ -10,6 +10,9 @@ import commands.twitter_to_bsky
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FILE = os.getenv("LOG_FILE", "/app/data/ruabot.log")
+LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", str(10 * 1024 * 1024)))  # 默认 10MB
+LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "5"))  # 默认保留 5 个
 ALLOWED_GROUPS = set(os.getenv("ALLOWED_GROUPS", "-1145141919810").split(","))
 
 # Bluesky → Telegram 配置
@@ -47,16 +50,49 @@ log_levels = {
 }
 level = log_levels.get(LOG_LEVEL, logging.INFO)
 
+# 配置日志格式
+log_format = "%(asctime)s - %(levelname)s: %(message)s"
+date_format = "%Y-%m-%d %H:%M:%S"
+
+# 创建日志目录
+if LOG_FILE:
+    log_dir = os.path.dirname(LOG_FILE)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+
+# 配置日志处理器
+handlers = []
+
+# 控制台处理器
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter(log_format, date_format))
+handlers.append(console_handler)
+
+# 文件处理器（带轮转）
+if LOG_FILE:
+    from logging.handlers import RotatingFileHandler
+    file_handler = RotatingFileHandler(
+        LOG_FILE,
+        maxBytes=LOG_MAX_BYTES,
+        backupCount=LOG_BACKUP_COUNT,
+        encoding="utf-8"
+    )
+    file_handler.setFormatter(logging.Formatter(log_format, date_format))
+    handlers.append(file_handler)
+
+# 配置根日志记录器
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
     level=level,
+    handlers=handlers
 )
 logger = logging.getLogger()
 
 if not BOT_TOKEN:
     logger.error("No BOT_TOKEN")
     exit(1)
+
+if LOG_FILE:
+    logger.info("Logs will be saved to: %s", LOG_FILE)
 
 bot = telebot.TeleBot(token=BOT_TOKEN, parse_mode="HTML")
 
@@ -92,8 +128,17 @@ def handle_text_message(message) -> None:
 def start_bot():
     target_chats = get_bsky_target_chats()
 
+    # 如果两个账号相同且都启用，自动禁用 BSKY→TG 避免重复
+    enable_bsky_to_tg = ENABLE_BSKY_TO_TG
+    if ENABLE_BSKY_TO_TG and ENABLE_TWITTER_TO_BSKY and BSKY_HANDLE == BSKY_POST_HANDLE:
+        logger.warning(
+            "BSKY_HANDLE 和 BSKY_POST_HANDLE 相同 (%s)，自动禁用 Bluesky→Telegram 转发以避免重复",
+            BSKY_HANDLE
+        )
+        enable_bsky_to_tg = False
+
     # 启动 Bluesky → Telegram 轮询器
-    if ENABLE_BSKY_TO_TG and BSKY_HANDLE and target_chats:
+    if enable_bsky_to_tg and BSKY_HANDLE and target_chats:
         logger.info(
             "Starting Bluesky→Telegram poller for %s → %s",
             BSKY_HANDLE,
@@ -104,7 +149,7 @@ def start_bot():
             args=(bot, BSKY_HANDLE, target_chats, BSKY_POLL_INTERVAL),
             daemon=True,
         ).start()
-    elif ENABLE_BSKY_TO_TG and BSKY_HANDLE:
+    elif enable_bsky_to_tg and BSKY_HANDLE:
         logger.warning(
             "Bluesky→Telegram poller is disabled because no valid ALLOWED_GROUPS target is configured"
         )
