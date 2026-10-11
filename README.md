@@ -2,11 +2,16 @@
 
 使用时需要关闭隐私模式。
 
-感谢：
+感谢以下的项目：
 
 - [GooGuJiang/Gugumoe-bot](https://github.com/GooGuJiang/Gugumoe-bot/)
 - [rikumi/tietie-bot](https://github.com/rikumi/tietie-bot/)
 - [sxyazi/bendan](https://github.com/sxyazi/bendan/)
+
+感谢以下的 AI 工具：
+
+- 吃白饭的大肥鱼和他的朋友们
+- OpenCode
 
 ## 环境变量
 
@@ -66,8 +71,8 @@ export TWITTER_STATE_FILE=/app/data/twitter_state.json
 
 转发规则：
 
-- ✅ **接受**：纯文本推文、文本+图片推文（最多4张）
-- ❌ **跳过**：回复、引用推文、包含视频/GIF、包含外链卡片
-- ❌ **跳过**：文本超过 300 字符的推文（Bluesky 限制）
-- 📝 只转发主推，不转发推文线程中的其他推文
+- 转发纯文本推文、文本+图片推文（最多4张）
+- 跳过回复、引用推文、包含视频/GIF、包含外链卡片
+- 跳过文本超过 300 字符的推文（Bluesky 限制）
+- 只转发主推，不转发推文线程中的其他推文
 
