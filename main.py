@@ -128,17 +128,8 @@ def handle_text_message(message) -> None:
 def start_bot():
     target_chats = get_bsky_target_chats()
 
-    # 如果两个账号相同且都启用，自动禁用 BSKY→TG 避免重复
-    enable_bsky_to_tg = ENABLE_BSKY_TO_TG
-    if ENABLE_BSKY_TO_TG and ENABLE_TWITTER_TO_BSKY and BSKY_HANDLE == BSKY_POST_HANDLE:
-        logger.warning(
-            "BSKY_HANDLE 和 BSKY_POST_HANDLE 相同 (%s)，自动禁用 Bluesky→Telegram 转发以避免重复",
-            BSKY_HANDLE
-        )
-        enable_bsky_to_tg = False
-
     # 启动 Bluesky → Telegram 轮询器
-    if enable_bsky_to_tg and BSKY_HANDLE and target_chats:
+    if ENABLE_BSKY_TO_TG and BSKY_HANDLE and target_chats:
         logger.info(
             "Starting Bluesky→Telegram poller for %s → %s",
             BSKY_HANDLE,
@@ -149,39 +140,36 @@ def start_bot():
             args=(bot, BSKY_HANDLE, target_chats, BSKY_POLL_INTERVAL),
             daemon=True,
         ).start()
-    elif enable_bsky_to_tg and BSKY_HANDLE:
+    elif ENABLE_BSKY_TO_TG and BSKY_HANDLE:
         logger.warning(
             "Bluesky→Telegram poller is disabled because no valid ALLOWED_GROUPS target is configured"
         )
     elif BSKY_HANDLE:
         logger.info("Bluesky→Telegram poller is disabled by ENABLE_BSKY_TO_TG=false")
 
-    # 启动 Twitter → Bluesky → Telegram 轮询器
-    if ENABLE_TWITTER_TO_BSKY and TWITTER_HANDLE and BSKY_POST_HANDLE and BSKY_POST_PASSWORD and target_chats:
+    # 启动 Twitter → Bluesky 轮询器
+    if ENABLE_TWITTER_TO_BSKY and TWITTER_HANDLE and BSKY_POST_HANDLE and BSKY_POST_PASSWORD:
         logger.info(
-            "Starting Twitter→Bluesky→Telegram poller for %s → %s → %s",
+            "Starting Twitter→Bluesky poller for %s → %s",
             TWITTER_HANDLE,
             BSKY_POST_HANDLE,
-            target_chats,
         )
         threading.Thread(
-            target=commands.twitter_to_bsky.poll_and_forward,
+            target=commands.twitter_to_bsky.poll_and_post,
             args=(
-                bot,
                 TWITTER_HANDLE,
                 BSKY_POST_HANDLE,
                 BSKY_POST_PASSWORD,
-                target_chats,
                 TWITTER_POLL_INTERVAL,
             ),
             daemon=True,
         ).start()
     elif ENABLE_TWITTER_TO_BSKY:
         logger.warning(
-            "Twitter→Bluesky→Telegram poller is disabled: missing configuration (TWITTER_HANDLE, BSKY_POST_HANDLE, BSKY_POST_PASSWORD, or ALLOWED_GROUPS)"
+            "Twitter→Bluesky poller is disabled: missing configuration (TWITTER_HANDLE, BSKY_POST_HANDLE, or BSKY_POST_PASSWORD)"
         )
     elif TWITTER_HANDLE:
-        logger.info("Twitter→Bluesky→Telegram poller is disabled by ENABLE_TWITTER_TO_BSKY=false")
+        logger.info("Twitter→Bluesky poller is disabled by ENABLE_TWITTER_TO_BSKY=false")
 
     while True:
         try:

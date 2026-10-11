@@ -71,7 +71,7 @@ export TWITTER_STATE_FILE=/app/data/twitter_state.json
 配置了 `ENABLE_TWITTER_TO_BSKY=true` 和相关参数后，机器人会：
 1. 轮询指定 Twitter 账号的最新推文
 2. 将符合条件的推文转发到 Bluesky
-3. 同时转发到 `ALLOWED_GROUPS` 里的群组/频道
+3. **通过 Bluesky→Telegram 轮询器将内容转发到群**（需要同时启用 `ENABLE_BSKY_TO_TG` 并设置 `BSKY_HANDLE` 为你的 Bluesky 账号）
 
 说明：
 
@@ -88,4 +88,6 @@ export TWITTER_STATE_FILE=/app/data/twitter_state.json
 - 跳过回复、引用推文、包含视频/GIF、包含外链卡片
 - 跳过文本超过 300 字符的推文（Bluesky 限制）
 - 只转发主推，不转发推文线程中的其他推文
+
+**注意**：推文内容会先发到 Bluesky，然后由 Bluesky→Telegram 轮询器转发到群（会有一个轮询周期的延迟），这样可以避免重复转发。同时你手动在 Bluesky 发的内容也会被转发进群。
 

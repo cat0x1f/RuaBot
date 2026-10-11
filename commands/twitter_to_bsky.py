@@ -100,15 +100,13 @@ def save_seen_ids(seen_ids: list[str]) -> None:
         logger.error("Failed to save twitter state to %s: %s", STATE_FILE, exc)
 
 
-def poll_and_forward(
-    bot,
+def poll_and_post(
     twitter_handle: str,
     bsky_handle: str,
     bsky_password: str,
-    chat_ids: list[str],
     interval_seconds: int,
 ) -> None:
-    """轮询 Twitter 并转发到 Bluesky 和 Telegram"""
+    """轮询 Twitter 并转发到 Bluesky"""
     # 初始化 Bluesky 客户端
     try:
         bsky_client = BskyClient(bsky_handle, bsky_password)
@@ -165,12 +163,6 @@ def poll_and_forward(
                             text=tweet["text"], image_urls=tweet.get("images", [])
                         )
                         logger.info("Forwarded tweet %s to Bluesky: %s", tweet_id, bsky_uri)
-
-                        # 转发到 Telegram
-                        forward_to_telegram(bot, chat_ids, tweet)
-                        logger.info(
-                            "Forwarded tweet %s to Telegram: %s", tweet_id, chat_ids
-                        )
                     except Exception as exc:
                         logger.error("Failed to forward tweet %s: %s", tweet_id, exc)
         except TwitterRateLimitError as exc:
@@ -271,40 +263,3 @@ def extract_tweet_id(url: str) -> str | None:
     if len(parts) > 0 and parts[-1].isdigit():
         return parts[-1]
     return None
-
-
-def forward_to_telegram(bot, chat_ids: list[str], tweet: dict[str, Any]) -> None:
-    """转发推文到 Telegram"""
-    from telebot import types
-
-    text = tweet.get("text", "").strip()
-    images = tweet.get("images", [])
-
-    for chat_id in chat_ids:
-        try:
-            if images:
-                send_images(bot, chat_id, images, text)
-            elif text:
-                bot.send_message(chat_id, text)
-            else:
-                logger.info("Skipped empty tweet %s for %s", tweet["id"], chat_id)
-        except Exception as exc:
-            logger.error("Failed to send to chat %s: %s", chat_id, exc)
-
-
-def send_images(bot, chat_id: str, images: list[str], caption: str) -> None:
-    """发送图片到 Telegram"""
-    from telebot import types
-
-    if len(images) == 1:
-        bot.send_photo(chat_id, images[0], caption=caption or None)
-        return
-
-    media = []
-    for index, image_url in enumerate(images):
-        if index == 0 and caption:
-            media.append(types.InputMediaPhoto(image_url, caption=caption))
-        else:
-            media.append(types.InputMediaPhoto(image_url))
-
-    bot.send_media_group(chat_id, media)
