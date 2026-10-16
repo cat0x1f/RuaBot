@@ -5,8 +5,9 @@ import os
 import time
 from typing import Any
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
-from atproto import Client
+from atproto import Client, models
 
 FXTWITTER_BASE_URL = "https://api.fxtwitter.com"
 TWITTER_STATUSES_ENDPOINT = "/2/profile/{handle}/statuses"
@@ -31,23 +32,31 @@ class BskyClient:
             logger.error("Failed to login to Bluesky: %s", exc)
             raise
 
-    def post(self, text: str, image_urls: list[str] = None) -> str:
+    def post(self, text: str, images: list[dict[str, Any]] = None) -> str:
         """发布帖子到 Bluesky，返回帖子 URI"""
         try:
-            if image_urls:
-                # 下载图片数据
+            if images:
+                # 下载图片数据，宽高比与成功下载的图片一一对应
                 images_data = []
-                for url in image_urls[:4]:  # Bluesky 最多 4 张图片
+                aspect_ratios = []
+                for image in images[:4]:  # Bluesky 最多 4 张图片
+                    url = image["url"]
                     try:
                         img_data = self._download_image(url)
-                        images_data.append(img_data)
-                        logger.debug("Downloaded image: %s", url)
                     except Exception as exc:
                         logger.warning("Failed to download image %s: %s", url, exc)
+                        continue
+                    images_data.append(img_data)
+                    aspect_ratios.append(build_aspect_ratio(image))
+                    logger.debug("Downloaded image: %s", url)
 
                 if images_data:
                     # 发帖带图片
-                    response = self.client.send_images(text=text, images=images_data)
+                    response = self.client.send_images(
+                        text=text,
+                        images=images_data,
+                        image_aspect_ratios=aspect_ratios,
+                    )
                 else:
                     # 图片全部失败，只发文本
                     response = self.client.send_post(text=text)
@@ -160,7 +169,7 @@ def poll_and_post(
                     try:
                         # 转发到 Bluesky
                         bsky_uri = bsky_client.post(
-                            text=tweet["text"], image_urls=tweet.get("images", [])
+                            text=tweet["text"], images=tweet.get("images", [])
                         )
                         logger.info("Forwarded tweet %s to Bluesky: %s", tweet_id, bsky_uri)
                     except Exception as exc:
@@ -201,10 +210,14 @@ def fetch_latest_tweets(handle: str, limit: int = 10) -> list[dict[str, Any]]:
             logger.info("Skipped tweet %s: is a reply", tweet_id)
             continue
 
+        # 检查是否为转推
+        if item.get("reposted_by"):
+            logger.info("Skipped tweet %s: is a repost", tweet_id)
+            continue
+
         # 检查媒体类型
         media = item.get("media") or {}
         images = []
-        has_unsupported_media = False
 
         # 检查是否有不支持的内容
         if item.get("quote"):
@@ -220,9 +233,16 @@ def fetch_latest_tweets(handle: str, limit: int = 10) -> list[dict[str, Any]]:
             continue
 
         # 提取图片
-        photos = media.get("photos", [])
-        if photos:
-            images = [photo.get("url") for photo in photos if photo.get("url")]
+        for photo in media.get("photos") or []:
+            if not photo.get("url"):
+                continue
+            images.append(
+                {
+                    "url": to_large_image_url(photo["url"]),
+                    "width": photo.get("width"),
+                    "height": photo.get("height"),
+                }
+            )
 
         # 只接受纯文本或文本+图片
         if not text and not images:
@@ -253,6 +273,22 @@ def fetch_json(url: str) -> dict[str, Any]:
         raise RuntimeError(f"HTTP {exc.code} from Twitter API") from exc
     except URLError as exc:
         raise RuntimeError(f"Network error calling Twitter API: {exc.reason}") from exc
+
+
+def to_large_image_url(url: str) -> str:
+    """把图片地址的 name 参数换成 large（最长边 2048），避免原图过大"""
+    parsed = urlparse(url)
+    query = parse_qs(parsed.query)
+    query["name"] = ["large"]
+    return urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+
+
+def build_aspect_ratio(image: dict[str, Any]):
+    width = image.get("width")
+    height = image.get("height")
+    if isinstance(width, int) and isinstance(height, int) and width > 0 and height > 0:
+        return models.AppBskyEmbedDefs.AspectRatio(width=width, height=height)
+    return None
 
 
 def extract_tweet_id(url: str) -> str | None:
